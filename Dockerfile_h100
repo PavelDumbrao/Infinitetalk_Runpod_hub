@@ -1,53 +1,125 @@
-# H100-optimized InfiniteTalk for RunPod Serverless
-# This Dockerfile uses the H100-compatible base image with SM90 support
+# H100-optimized InfiniteTalk for RunPod Serverless (all-in-one build)
+# This Dockerfile combines base image + InfiniteTalk setup for H100 with SM90 support
 
-# Use H100-optimized base image (you need to build base_h100.Dockerfile first)
-# Change <your-dockerhub-username> to your actual Docker Hub username
-FROM <your-dockerhub-username>/infinitetalk-h100-base:1.0 as runtime
+FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04 as runtime
 
-# Install wget
-RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+# Remove any third-party apt sources
+RUN rm -f /etc/apt/sources.list.d/*.list
 
-RUN pip install -U "huggingface_hub[hf_transfer]"
-RUN pip install runpod websocket-client librosa
+# Set shell and environment variables
+SHELL ["/bin/bash", "-c"]
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV SHELL=/bin/bash
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH="/usr/local/cuda/bin:${PATH}"
+ENV LD_LIBRARY_PATH="/usr/local/cuda/lib64:${LD_LIBRARY_PATH}"
+ENV TORCH_CUDA_ARCH_LIST="9.0"
 
 WORKDIR /
 
-RUN git clone https://github.com/comfyanonymous/ComfyUI.git && \
-    cd /ComfyUI && \
+# Update and install system packages
+RUN apt-get update --yes && \\
+    apt-get upgrade --yes && \\
+    apt install --yes --no-install-recommends git wget curl bash libgl1 software-properties-common openssh-server nginx rsync ffmpeg && \\
+    apt-get install --yes --no-install-recommends build-essential libssl-dev libffi-dev libxml2-dev libxslt1-dev zlib1g-dev git-lfs && \\
+    add-apt-repository ppa:deadsnakes/ppa && \\
+    apt install python3.10-dev python3.10-venv -y --no-install-recommends && \\
+    apt-get autoremove -y && \\
+    apt-get clean && \\
+    rm -rf /var/lib/apt/lists/* && \\
+    echo "en_US.UTF-8 UTF-8" > /etc/locale.gen
+
+# Setup Python 3.10
+RUN ln -s /usr/bin/python3.10 /usr/bin/python && \\
+    rm /usr/bin/python3 && \\
+    ln -s /usr/bin/python3.10 /usr/bin/python3 && \\
+    curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && \\
+    python get-pip.py
+
+RUN pip install -U wheel setuptools packaging
+
+# Install PyTorch 2.7 with CUDA 12.8 support
+RUN pip install torch==2.7.0 torchvision==0.20.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
+
+# Install xFormers compatible with PyTorch 2.7 and CUDA 12.8
+RUN pip install xformers --index-url https://download.pytorch.org/whl/cu128
+
+WORKDIR /
+RUN git clone https://github.com/MeiGen-AI/InfiniteTalk.git
+
+WORKDIR /InfiniteTalk
+
+RUN pip install misaki[en]
+RUN pip install ninja psutil packaging
+
+# Install Flash Attention 2
+RUN pip install flash_attn==2.7.4.post1 --no-build-isolation
+
+# Install Triton 3.3.0 (required for SageAttention on H100)
+RUN pip install triton==3.3.0
+
+# Clone and build SageAttention with SM90 support for H100
+WORKDIR /tmp
+RUN git clone https://github.com/thu-ml/SageAttention.git && \\
+    cd SageAttention && \\
+    sed -i 's/# HAS_SM90 = False/HAS_SM90 = True/g' setup.py && \\
+    sed -i 's/# SUPPORTED_ARCHS = {"8.0", "8.6", "8.9", "9.0"}/SUPPORTED_ARCHS = {"9.0"}/g' setup.py && \\
+    TORCH_CUDA_ARCH_LIST="9.0" python setup.py bdist_wheel && \\
+    pip install dist/*.whl && \\
+    cd / && rm -rf /tmp/SageAttention
+
+WORKDIR /InfiniteTalk
+
+# Install other requirements
+RUN pip install -r requirements.txt
+RUN pip install librosa ffmpeg
+RUN pip uninstall -y transformers
+RUN pip install transformers==4.48.2
+RUN pip install runpod websocket-client
+RUN pip install -U "huggingface_hub[hf_transfer]"
+
+# Verify H100 compatibility
+RUN python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}'); print(f'CUDA version: {torch.version.cuda}'); print(f'PyTorch version: {torch.__version__}')"
+
+# Install ComfyUI and custom nodes
+WORKDIR /
+
+RUN git clone https://github.com/comfyanonymous/ComfyUI.git && \\
+    cd /ComfyUI && \\
     pip install -r requirements.txt
 
-RUN cd /ComfyUI/custom_nodes && \
-    git clone https://github.com/Comfy-Org/ComfyUI-Manager.git && \
-    cd ComfyUI-Manager && \
+RUN cd /ComfyUI/custom_nodes && \\
+    git clone https://github.com/Comfy-Org/ComfyUI-Manager.git && \\
+    cd ComfyUI-Manager && \\
     pip install -r requirements.txt
 
-RUN cd /ComfyUI/custom_nodes && \
-    git clone https://github.com/city96/ComfyUI-GGUF && \
-    cd ComfyUI-GGUF && \
+RUN cd /ComfyUI/custom_nodes && \\
+    git clone https://github.com/city96/ComfyUI-GGUF && \\
+    cd ComfyUI-GGUF && \\
     pip install -r requirements.txt
 
-RUN cd /ComfyUI/custom_nodes && \
-    git clone https://github.com/kijai/ComfyUI-KJNodes && \
-    cd ComfyUI-KJNodes && \
+RUN cd /ComfyUI/custom_nodes && \\
+    git clone https://github.com/kijai/ComfyUI-KJNodes && \\
+    cd ComfyUI-KJNodes && \\
     pip install -r requirements.txt
 
-RUN cd /ComfyUI/custom_nodes && \
-    git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite && \
-    cd ComfyUI-VideoHelperSuite && \
+RUN cd /ComfyUI/custom_nodes && \\
+    git clone https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite && \\
+    cd ComfyUI-VideoHelperSuite && \\
     pip install -r requirements.txt
  
-RUN cd /ComfyUI/custom_nodes && \
+RUN cd /ComfyUI/custom_nodes && \\
     git clone https://github.com/orssorbit/ComfyUI-wanBlockswap
 
-RUN cd /ComfyUI/custom_nodes && \
-    git clone https://github.com/kijai/ComfyUI-MelBandRoFormer && \
-    cd ComfyUI-MelBandRoFormer && \
+RUN cd /ComfyUI/custom_nodes && \\
+    git clone https://github.com/kijai/ComfyUI-MelBandRoFormer && \\
+    cd ComfyUI-MelBandRoFormer && \\
     pip install -r requirements.txt
 
-RUN cd /ComfyUI/custom_nodes && \
-    git clone https://github.com/kijai/ComfyUI-WanVideoWrapper && \
-    cd ComfyUI-WanVideoWrapper && \
+RUN cd /ComfyUI/custom_nodes && \\
+    git clone https://github.com/kijai/ComfyUI-WanVideoWrapper && \\
+    cd ComfyUI-WanVideoWrapper && \\
     pip install -r requirements.txt
 
 # Download models (fp8 versions for better H100 performance)
