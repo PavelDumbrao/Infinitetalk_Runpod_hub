@@ -39,9 +39,11 @@ RUN ln -s /usr/bin/python3.10 /usr/bin/python && \
 
 RUN pip install -U wheel setuptools packaging
 
-# Install PyTorch with CUDA 12.4 support (compatible with H100 SM90)RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
-# Install xFormers compatible with PyTorch and CUDA 12.4RUN pip install xformers --index-url https://download.pytorch.org/whl/cu128
-RUN pip install xformersWORKDIR /
+# Install PyTorch with CUDA 12.4 support (compatible with H100 SM90)
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu124
+# Install xFormers compatible with PyTorch and CUDA 12.4RUN 
+RUN pip install xformers --index-url https://download.pytorch.org/whl/cu128
+WORKDIR /InfiniteTalk
 RUN git clone https://github.com/MeiGen-AI/InfiniteTalk.git
 
 WORKDIR /InfiniteTalk
