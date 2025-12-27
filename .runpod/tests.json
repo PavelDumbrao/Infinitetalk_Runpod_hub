@@ -1,0 +1,16 @@
+{
+  "tests": [
+    {
+      "name": "h100_gpu_health",
+      "input": {
+        "test": "ping"
+      },
+      "timeout": 120000
+    }
+  ],
+  "config": {
+    "gpuTypeId": "NVIDIA H100 80GB HBM3",
+    "gpuCount": 1,
+    "allowedCudaVersions": ["12.8", "12.9"]
+  }
+}
