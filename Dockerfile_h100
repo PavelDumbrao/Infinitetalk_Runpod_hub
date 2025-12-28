@@ -57,16 +57,12 @@ RUN pip install flash_attn==2.7.4.post1 --no-build-isolation
 # Install Triton 3.3.0 (required for SageAttention on H100)
 RUN pip install triton==3.3.0
 
-# Clone and build SageAttention with SM90 support for H100
-WORKDIR /tmp
-RUN git clone https://github.com/thu-ml/SageAttention.git && \
-    cd SageAttention && \
-    sed -i 's/# HAS_SM90 = False/HAS_SM90 = True/g' setup.py && \
-    sed -i 's/# SUPPORTED_ARCHS = {"8.0", "8.6", "8.9", "9.0"}/SUPPORTED_ARCHS = {"9.0"}/g' setup.py && \
-    TORCH_CUDA_ARCH_LIST="9.0" python setup.py bdist_wheel && \
-    pip install dist/*.whl && \
-    cd / && rm -rf /tmp/SageAttention
+# Install SageAttention with fallback to Flash Attention 2
+# SageAttention may fail to build without GPU during Docker build, so we use pip with fallback
+RUN pip install sageattention==1.0.6 || echo "SageAttention build failed, using Flash Attention 2 fallback"
 
+# Copy fix_attention.py to handle runtime fallback gracefully
+COPY fix_attention.py /InfiniteTalk/fix_attention.py
 WORKDIR /InfiniteTalk
 
 # Install other requirements
