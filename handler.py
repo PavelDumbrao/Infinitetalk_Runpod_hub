@@ -12,6 +12,16 @@ import subprocess
 import librosa
 import shutil
 
+# Apply SageAttention fallback patch for H100/A100 compatibility
+try:
+    import sys
+    sys.path.insert(0, '/')
+    import fix_attention
+    fix_attention.patch_attention()
+except Exception as e:
+    logging.warning(f"Could not apply SageAttention fallback patch: {e}")
+    logging.info("Continuing with default attention implementation...")
+
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
