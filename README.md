@@ -8,6 +8,9 @@ This project is a template designed to easily deploy and use [InfiniteTalk](http
 InfiniteTalk is an AI model that takes a single portrait image and speech audio as input to generate natural lip-sync videos with infinite talking capabilities.
 
 ## 🎨 Engui Studio Integration
+## Acknowledgements
+
+This repository is forked from [wlsdml1114/InfiniteTalk_Runpod_hub](https://console.runpod.io/hub/wlsdml1114/Infinitetalk_Runpod_hub). Thanks to the original author for providing the base template and inspiration.
 
 [![EnguiStudio](https://raw.githubusercontent.com/wlsdml1114/Engui_Studio/main/assets/banner.png)](https://github.com/wlsdml1114/Engui_Studio)
 
